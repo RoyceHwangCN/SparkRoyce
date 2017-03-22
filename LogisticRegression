@@ -1,0 +1,125 @@
+package PDKB
+
+import java.util.Properties
+
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.{SparkConf, SparkContext}
+
+/**
+  * Created by Royce on 2017/3/22.
+  */
+
+object PDKBFactorAnalysis {
+
+  def main(args: Array[String]): Unit = {
+    if (args.length != 6) {
+      System.err.println("Usage:")
+      System.exit(1)
+    }
+
+    val prop = new Properties()
+
+    prop.setProperty("file-encoding", "UTF-8")
+
+    Logger.getLogger("org.apache.spark").setLevel(Level.WARN)
+
+    Logger.getLogger("org.apache.eclipse.jetty").setLevel(Level.OFF)
+
+    val conf = new SparkConf()
+
+    val sc = new SparkContext(conf)
+
+    val IQC_data = sc.textFile(args(0)).map { line =>
+      val fields = line.split("\\t\\t")
+      (fields(0), fields(1))
+    }
+
+    val TK6_data = sc.textFile(args(1)).map { line =>
+      val fields = line.split("\\t\\t")
+      (fields(0), fields(1))
+    }
+
+    val TK9_data = sc.textFile(args(2)).map { line =>
+      val fields = line.split("\\t\\t")
+      (fields(0), fields(1))
+    }
+
+    val TC1_data = sc.textFile(args(3)).map { line =>
+      val fields = line.split("\\t\\t")
+      (fields(0), fields(1))
+    }
+
+    val TK_PCBA = sc.textFile(args(4)).map { line =>
+      val fields = line.split("\\t\\t")
+      (fields(0), fields(1))
+    }
+
+    val TC_PCBA = sc.textFile(args(5)).map { line =>
+      val fields = line.split("\\t\\t")
+      (fields(0), fields(1))
+    }
+
+    val TK6_temp_data = TK6_data.join(TK_PCBA).map { case (key, (value1, value2)) =>
+      val record = value2.split("\\t")
+      (record(0), value1)
+    }
+
+    val TK9_temp_data = TK9_data.join(TK_PCBA).map { case (key, (value1, value2)) =>
+      val record = value2.split("\\t")
+      (record(0), value1)
+    }
+
+    val TC1_temp_data = TC1_data.join(TC_PCBA).map { case (key, (value1, value2)) =>
+      val record = value2.split("\\t")
+      (record(0), value1)
+    }
+
+    val data = IQC_data
+      .join(TK6_temp_data)
+      .join(TK9_temp_data)
+      .join(TC1_temp_data)
+      .map { case (key, (((value1, value2), value3), value4)) =>
+        val label = value4.split(",")
+        /**println(value1 + "\n")
+        println(value2 + "\n")
+        println(value3 + "\n")
+        println(value4 + "\n")*/
+        val feature = value1 + '\t' + value2 + '\t' + value3 + label(1)
+        //println(feature)
+        /**for (str <- feature.split("\\t"))
+        println(str + "\n")*/
+        LabeledPoint(label(0).toDouble, Vectors.dense(feature.split("\\t").map(_.toDouble)))
+      }
+
+    val split = data.randomSplit(Array(0.7, 0.3), 11L)
+
+    val train = split(0)
+
+    val test = split(1)
+
+    val model = new LogisticRegressionWithLBFGS()
+      .setNumClasses(2)
+      .run(data)
+
+    /**val PredictionAndLabel = test.map { case LabeledPoint(label, feature) =>
+      val prediction = model.predict(feature)
+      (prediction, label)
+    }
+
+    val metic = new MulticlassMetrics(PredictionAndLabel)
+
+    val Accuracy = metic.accuracy
+
+    println("The accuracy = " + Accuracy + "\n")
+
+    PredictionAndLabel.foreach(p => println(p))*/
+
+    println(model.weights)
+
+
+  }
+}
